@@ -74,6 +74,21 @@ class _MapScreenState extends State<MapScreen> {
     description: 'Edinburg Cool looking fountain', 
     coordinates: Position(-98.176061, 26.304802)
     ),
+    LocationData(
+      title: 'Utrgv Statue',
+      description: '[PlaceHolder Fun Fact]',
+      coordinates: Position(-98.174068, 26.304240)
+    ),
+    LocationData(
+      title: 'Utrgv Quad',
+      description: 'PlaceHolder here :3', 
+      coordinates: Position(-98.175415, 26.306487)
+    ),
+    LocationData(
+      title: 'Sundial', 
+      description: '[Testing a long description to see how it works if the ai fun facts wants to yap a lot or not lol]', 
+      coordinates: Position(-98.170984, 26.306127)
+    ),
   ];
 
   //This Map is to link Mapbox's auto-generated IDs to the custom location data
@@ -128,36 +143,92 @@ class _MapScreenState extends State<MapScreen> {
 
 // Method to slide a modal up from the bottom of the screen
   void _showLocationModal(LocationData data) {
+    //Local state for modals counter TEST
+    int tapCount = 0;
+    bool isUpdating = false;
+
     showModalBottomSheet(
-      //Modal would have a rectangle Border with the description inside(W.I.P)
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        return Container(
-          width: double.infinity,   //Set the modal to span the whole screen width
-          padding: const EdgeInsets.all(20.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min, // Wraps tightly around the content test
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                data.title,
-                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 12, width: null),
-              Text(
-                data.description,
-                style: const TextStyle(fontSize: 18, color: Colors.black87),
-              ),
-              const SizedBox(height: 32), // Padding at the bottom
-            ],
-          ),
-        );
-      },
-    );
-  }
+    context: context,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (context) {
+      // StatefulBuilder allows to update the UI specifically inside the modal
+      return StatefulBuilder(
+        builder: (BuildContext context, StateSetter setModalState) {
+          //Container for the modal
+          return Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  data.title,
+                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  data.description,
+                  style: const TextStyle(fontSize: 18, color: Colors.black87),
+                ),
+                const SizedBox(height: 24),
+                
+                // --- New Counter Button & UI ---
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    /*Text(   // THIS IS TO TEST THE TAP BUTTON
+                      'Taps: $tapCount',
+                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+                    ), */
+                    ElevatedButton.icon(
+                      onPressed: isUpdating 
+                        ? null 
+                        : () async {
+                            // 1. Show loading state in the modal
+                            setModalState(() { isUpdating = true; });
+                            
+                            // 2. Increment locally
+                            tapCount++;
+
+                            /* 3. Update Supabase (IF NEEDED)
+                            try {
+                              // Assuming you have a table named 'markers' with columns 'title' and 'tap_count'
+                              await Supabase.instance.client
+                                  .from('markers')
+                                  .update({'tap_count': tapCount})
+                                  .eq('title', data.title); // Using the title as the identifier
+                            } catch (error) {
+                              debugPrint('Supabase update failed: $error');
+                              // Optional: Revert the counter if the database update fails
+                              tapCount--;
+                            } */
+
+                            // 4. Hide loading state and refresh modal UI
+                            setModalState(() { isUpdating = false; });
+                          },
+                      icon: isUpdating 
+                        ? const SizedBox(
+                            width: 16, 
+                            height: 16, 
+                            child: CircularProgressIndicator(strokeWidth: 2)
+                          )
+                        : const Icon(Icons.touch_app),
+                      label: const Text('Tap Marker'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 32),
+              ],
+            ),
+          );
+        },
+      );
+    },
+  );
+}
 
   Future<void> _enableLiveLocation() async {
     if (_isRequestingLocation) {
