@@ -2,9 +2,9 @@ import 'dart:async';
 
 import 'package:campus_app/auth/login_screen.dart';
 import 'package:campus_app/screens/admin_dashboard.dart';
-import 'package:campus_app/screens/map_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:campus_app/screens/main_screen.dart';
 
 class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
@@ -131,7 +131,7 @@ class _AuthGateState extends State<AuthGate> {
 
         switch (snapshot.data) {
           case 'student':
-            return const MapScreen();
+            return const MainScreen();
 
           case 'admin':
             return const AdminDashboard();
