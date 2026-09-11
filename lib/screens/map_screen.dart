@@ -97,14 +97,14 @@ class _MapScreenState extends State<MapScreen> {
   Future<void> _addCustomMarkers() async {
     if (_mapboxMap == null) return;
 
-    // 1. Initialize the annotation manager
+    // Initialize the annotation manager
     _pointAnnotationManager = await _mapboxMap!.annotations.createPointAnnotationManager();
 
-    // 2. Load the custom marker image from the assets folder
+    // Load the custom marker image from the assets folder
     final ByteData bytes = await rootBundle.load('assets/test_marker.png');
     final Uint8List imageData = bytes.buffer.asUint8List();
 
-    // 3. Loop through the list of coords and make a marker for each one & properties
+    // Loop through the list of coords and make a marker for each one & properties
     List<PointAnnotationOptions> allMarkerOptions = customLocations.map((loc) {
       return PointAnnotationOptions(
         geometry: Point(coordinates: loc.coordinates),
@@ -114,10 +114,10 @@ class _MapScreenState extends State<MapScreen> {
         textOffset: [0.0, 1.5],
       );
     }).toList();
-    // 4. Add the markers to the map simultaneously & make annotation and IDs
+    // Add the markers to the map simultaneously & make annotation and IDs
     final annotations = await _pointAnnotationManager?.createMulti(allMarkerOptions);
 
-    // 5. Link the generated ID to locationData
+    // Link the generated ID to locationData
     if (annotations != null) {
       for (int i =0; i < annotations.length; i++) {
         //extract the ID
@@ -129,7 +129,7 @@ class _MapScreenState extends State<MapScreen> {
       }
     }
 
-    // 6. Handle using the taps 
+    // Handle using the taps 
     _pointAnnotationManager?.tapEvents(
       onTap: (annotation) {
         //Look up the location marker that was tapped from its ID
@@ -175,6 +175,30 @@ class _MapScreenState extends State<MapScreen> {
                 ),
                 const SizedBox(height: 24),
                 
+                //--- Event Table ---
+                const Text(
+                  'Event Table (W.I.P.)',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                // Hardcoded DataTable here, change this to dynamic por favor :3
+                DataTable(
+                  columns: const [
+                    DataColumn(label: Text('Event Name')),
+                    DataColumn(label: Text('Time')),
+                  ],
+                  rows: const [
+                    DataRow(cells: [
+                      DataCell(Text('Sample Event 1')),
+                      DataCell(Text('11:00 AM')),
+                    ]),
+                    DataRow(cells: [
+                      DataCell(Text('Sample Event 2')),
+                      DataCell(Text('2:00 PM')),
+                    ]),
+                  ],
+                ),
+
                 // --- New Counter Button & UI ---
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,

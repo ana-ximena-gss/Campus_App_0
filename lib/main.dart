@@ -2,7 +2,6 @@ import 'package:campus_app/auth/auth_gate.dart';
 import 'package:flutter/material.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
