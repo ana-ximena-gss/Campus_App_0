@@ -247,83 +247,131 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   }
 
   void _showLocationDetails(LocationData data) {
+    // Local state for the marker counter.
+    int tapCount = 0;
+    bool isUpdating = false;
+
     showModalBottomSheet<void>(
       context: context,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) => Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              data.title,
-              style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              data.description,
-              style: const TextStyle(
-                fontSize: 18,
-                color: Colors.black87,
-              ),
-            ),
-            const SizedBox(height: 24),
+      builder: (context) {
+        // StatefulBuilder allows the UI inside the modal to update.
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setModalState) {
+            return Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    data.title,
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
 
-            // --- Event Table ---
-            const Text(
-              'Event Table (W.I.P.)',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
+                  Text(
+                    data.description,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      color: Colors.black87,
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  // --- Event Table ---
+                  const Text(
+                    'Event Table (W.I.P.)',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Hardcoded table for now.
+                  // This can be connected to Supabase later.
+                  DataTable(
+                    columns: const [
+                      DataColumn(
+                        label: Text('Event Name'),
+                      ),
+                      DataColumn(
+                        label: Text('Time'),
+                      ),
+                    ],
+                    rows: const [
+                      DataRow(
+                        cells: [
+                          DataCell(
+                            Text('Sample Event 1'),
+                          ),
+                          DataCell(
+                            Text('11:00 AM'),
+                          ),
+                        ],
+                      ),
+                      DataRow(
+                        cells: [
+                          DataCell(
+                            Text('Sample Event 2'),
+                          ),
+                          DataCell(
+                            Text('2:00 PM'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // --- Tap Marker Button ---
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      ElevatedButton.icon(
+                        onPressed: isUpdating
+                            ? null
+                            : () async {
+                                // Show the loading state.
+                                setModalState(() {
+                                  isUpdating = true;
+                                });
+
+                                // Increment the local tap counter.
+                                tapCount++;
+
+                                // Supabase update can be added later.
+                                setModalState(() {
+                                  isUpdating = false;
+                                });
+                              },
+                        icon: isUpdating
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.touch_app),
+                        label: const Text('Tap Marker'),
+                      ),
+                    ],
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(height: 8),
-
-            // Hardcoded table for now.
-            // This can be connected to Supabase later.
-            DataTable(
-              columns: const [
-                DataColumn(
-                  label: Text('Event Name'),
-                ),
-                DataColumn(
-                  label: Text('Time'),
-                ),
-              ],
-              rows: const [
-                DataRow(
-                  cells: [
-                    DataCell(
-                      Text('Sample Event 1'),
-                    ),
-                    DataCell(
-                      Text('11:00 AM'),
-                    ),
-                  ],
-                ),
-                DataRow(
-                  cells: [
-                    DataCell(
-                      Text('Sample Event 2'),
-                    ),
-                    DataCell(
-                      Text('2:00 PM'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 16),
-          ],
-        ),
-      ),
+            );
+          },
+        );
+      },
     );
   }
 
