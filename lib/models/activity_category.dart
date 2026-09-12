@@ -79,7 +79,6 @@ class ActivityCategory {
     color: Color(0xFF616161),
   );
 
-  /// The single source of truth for the categories used by the Flutter app.
   static const all = <ActivityCategory>[
     sports,
     physicalGames,

@@ -2,18 +2,17 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/activity.dart';
 
-/// Reads temporary map activities from Supabase.
-///
-/// Activity creation and editing can be added here later, so database calls do
-/// not spread through map widgets.
+/// Handles Supabase reads and writes for temporary campus activities.
 class ActivityRepository {
   ActivityRepository({SupabaseClient? supabaseClient})
-    : _supabase = supabaseClient ?? Supabase.instance.client;
+      : _supabase = supabaseClient ?? Supabase.instance.client;
 
   final SupabaseClient _supabase;
 
-  /// Returns activities that are active at [now]. The database is the source
-  /// of truth: cancelled, future, and expired records are excluded here.
+  /// Returns approved activities that are currently active on the selected
+  /// campus.
+  ///
+  /// Pending and rejected activities are intentionally excluded from the map.
   Future<List<Activity>> fetchActiveActivities({
     required String campus,
     DateTime? now,
@@ -23,6 +22,7 @@ class ActivityRepository {
     final rows = await _supabase
         .from('activities')
         .select()
+        .eq('ticket_status', 'Approved')
         .isFilter('cancelled_at', null)
         .eq('campus', campus)
         .lte('starts_at', activeAt)
@@ -34,16 +34,28 @@ class ActivityRepository {
         .toList();
   }
 
-  /// Returns the current authenticated user if present. Useful for UI hints
-  /// when the feature is being connected to a database migration.
+  /// Returns all pending event submissions for the admin ticket dashboard.
+  Future<List<Activity>> fetchPendingActivities() async {
+    final rows = await _supabase
+        .from('activities')
+        .select()
+        .eq('ticket_status', 'Pending')
+        .order('created_at');
+
+    return (rows as List<dynamic>)
+        .map((row) => Activity.fromMap(row as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Returns the currently authenticated user's Supabase auth ID.
   String? getAuthenticatedUserId() {
     return _supabase.auth.currentUser?.id;
   }
 
-  /// Creates an activity for the currently authenticated Supabase user.
+  /// Creates a new activity for the currently authenticated user.
   ///
-  /// The activities migration assigns creator_id from auth.uid(), so this
-  /// method intentionally never accepts a creator ID from the UI.
+  /// ticket_status is not sent from Flutter. Supabase automatically assigns
+  /// the database default of Pending.
   Future<Activity> createActivity(ActivityDraft draft) async {
     if (_supabase.auth.currentUser == null) {
       throw StateError('You must be signed in to create an activity.');
@@ -56,5 +68,33 @@ class ActivityRepository {
         .single();
 
     return Activity.fromMap(row);
+  }
+
+  /// Approves a pending activity.
+  Future<void> approveActivity(String activityId) async {
+    if (_supabase.auth.currentUser == null) {
+      throw StateError('You must be signed in to approve an activity.');
+    }
+
+    await _supabase
+        .from('activities')
+        .update({
+          'ticket_status': 'Approved',
+        })
+        .eq('id', activityId);
+  }
+
+  /// Rejects a pending activity.
+  Future<void> rejectActivity(String activityId) async {
+    if (_supabase.auth.currentUser == null) {
+      throw StateError('You must be signed in to reject an activity.');
+    }
+
+    await _supabase
+        .from('activities')
+        .update({
+          'ticket_status': 'Rejected',
+        })
+        .eq('id', activityId);
   }
 }

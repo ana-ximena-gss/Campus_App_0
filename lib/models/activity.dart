@@ -1,8 +1,7 @@
 import 'activity_category.dart';
 
+
 /// A temporary, student-created activity displayed on the campus map.
-///
-/// This is intentionally separate from a permanent campus location.
 class Activity {
   const Activity({
     required this.id,
@@ -19,6 +18,7 @@ class Activity {
     required this.building,
     required this.floor,
     required this.roomOrArea,
+    required this.ticketStatus,
     required this.cancelledAt,
     required this.createdAt,
     required this.updatedAt,
@@ -38,6 +38,7 @@ class Activity {
   final String? building;
   final String? floor;
   final String? roomOrArea;
+  final String ticketStatus;
   final DateTime? cancelledAt;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -60,6 +61,7 @@ class Activity {
       building: map['building'] as String?,
       floor: map['floor'] as String?,
       roomOrArea: map['room_or_area'] as String?,
+      ticketStatus: map['ticket_status'] as String? ?? 'Pending',
       cancelledAt: _asDateTime(map['cancelled_at']),
       createdAt: DateTime.parse(map['created_at'] as String),
       updatedAt: DateTime.parse(map['updated_at'] as String),
@@ -83,13 +85,20 @@ class Activity {
       return double.parse(value);
     }
 
-    throw FormatException('Expected a numeric activity coordinate.');
+    throw const FormatException(
+      'Expected a numeric activity coordinate.',
+    );
   }
 }
 
 /// Validated input for a new temporary activity before it is sent to Supabase.
 ///
-/// The database assigns the activity ID, timestamps, and authenticated creator.
+/// Supabase assigns:
+/// - id
+/// - creator_id
+/// - ticket_status
+/// - created_at
+/// - updated_at
 class ActivityDraft {
   const ActivityDraft({
     required this.title,
@@ -126,8 +135,18 @@ class ActivityDraft {
       errors.add('Activity title is required.');
     }
 
+    if (title.trim().length > 120) {
+      errors.add('Activity title cannot exceed 120 characters.');
+    }
+
+    if (description != null && description!.length > 2000) {
+      errors.add('Description cannot exceed 2000 characters.');
+    }
+
     if (categoryId.trim().isEmpty ||
-        !ActivityCategory.all.any((category) => category.id == categoryId)) {
+        !ActivityCategory.all.any(
+          (category) => category.id == categoryId,
+        )) {
       errors.add('Choose a valid activity category.');
     }
 
@@ -135,7 +154,10 @@ class ActivityDraft {
       errors.add('Choose a valid campus.');
     }
 
-    if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+    if (latitude < -90 ||
+        latitude > 90 ||
+        longitude < -180 ||
+        longitude > 180) {
       errors.add('Activity coordinates must be valid.');
     }
 
@@ -161,7 +183,7 @@ class ActivityDraft {
 
   Map<String, Object?> toInsertMap() {
     return {
-      'title': title,
+      'title': title.trim(),
       'description': description,
       'category': categoryId,
       'campus': campus,
@@ -173,6 +195,9 @@ class ActivityDraft {
       'building': building,
       'floor': floor,
       'room_or_area': roomOrArea,
+
+      // Do NOT send ticket_status here.
+      // Supabase automatically sets it to Pending.
     };
   }
 }
