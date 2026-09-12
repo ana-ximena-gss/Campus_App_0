@@ -1,14 +1,20 @@
 import 'package:campus_app/auth/auth_gate.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   const mapboxToken = String.fromEnvironment('ACCESS_TOKEN');
 
   if (mapboxToken.isEmpty) {
-    runApp(const MissingMapboxTokenApp());
+    runApp(
+      const ProviderScope(
+        child: MissingMapboxTokenApp(),
+      ),
+    );
     return;
   }
 
@@ -19,14 +25,18 @@ Future<void> main() async {
     anonKey: 'sb_publishable_yJkW8eLqJ9Vod48IthOSQw_x_tSWc8c',
   );
 
-  runApp(const CampusApp());
+  runApp(
+    const ProviderScope(
+      child: CampusApp(),
+    ),
+  );
 }
 
-class CampusApp extends StatelessWidget {
+class CampusApp extends ConsumerWidget {
   const CampusApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return MaterialApp(
       title: 'UTRGV Campus App',
       debugShowCheckedModeBanner: false,
