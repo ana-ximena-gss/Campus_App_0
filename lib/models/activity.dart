@@ -119,6 +119,46 @@ class ActivityDraft {
   final String? floor;
   final String? roomOrArea;
 
+  String? validate() {
+    final errors = <String>[];
+
+    if (title.trim().isEmpty) {
+      errors.add('Activity title is required.');
+    }
+
+    if (categoryId.trim().isEmpty ||
+        !ActivityCategory.all.any((category) => category.id == categoryId)) {
+      errors.add('Choose a valid activity category.');
+    }
+
+    if (!const {'edinburg', 'brownsville'}.contains(campus)) {
+      errors.add('Choose a valid campus.');
+    }
+
+    if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+      errors.add('Activity coordinates must be valid.');
+    }
+
+    if (indoorOutdoor.trim().isEmpty ||
+        !const {'indoor', 'outdoor'}.contains(indoorOutdoor)) {
+      errors.add('Choose indoor or outdoor.');
+    }
+
+    if (!endsAt.isAfter(startsAt)) {
+      errors.add('End time must be after the start time.');
+    }
+
+    if (endsAt.difference(startsAt) > const Duration(days: 1)) {
+      errors.add('Activities can last no longer than 24 hours.');
+    }
+
+    if (errors.isEmpty) {
+      return null;
+    }
+
+    return errors.join('\n');
+  }
+
   Map<String, Object?> toInsertMap() {
     return {
       'title': title,

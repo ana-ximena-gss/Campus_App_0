@@ -2,6 +2,7 @@ import 'package:campus_app/models/activity.dart';
 import 'package:campus_app/models/activity_category.dart';
 import 'package:campus_app/services/activity_repository.dart';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class CreateActivityScreen extends StatefulWidget {
   const CreateActivityScreen({
@@ -106,24 +107,33 @@ class _CreateActivityScreenState extends State<CreateActivityScreen> {
 
     if (!formIsValid || !hasLocation) return;
 
+    final draft = ActivityDraft(
+      title: _titleController.text.trim(),
+      description: _optionalValue(_descriptionController.text),
+      categoryId: _categoryId ?? '',
+      campus: widget.campus,
+      latitude: _latitude ?? 0,
+      longitude: _longitude ?? 0,
+      startsAt: _startsAt,
+      endsAt: _endsAt,
+      indoorOutdoor: _indoorOutdoor ?? '',
+      building: _optionalValue(_buildingController.text),
+      floor: _optionalValue(_floorController.text),
+      roomOrArea: _optionalValue(_roomOrAreaController.text),
+    );
+
+    final validationMessage = draft.validate();
+    if (validationMessage != null) {
+      setState(() {
+        _submissionError = validationMessage;
+      });
+      return;
+    }
+
     final now = DateTime.now();
     if (_startsAt.isBefore(now.subtract(const Duration(minutes: 1)))) {
       setState(() {
         _submissionError = 'Choose a start time that is now or in the future.';
-      });
-      return;
-    }
-
-    if (!_endsAt.isAfter(_startsAt)) {
-      setState(() {
-        _submissionError = 'The end time must be after the start time.';
-      });
-      return;
-    }
-
-    if (_endsAt.difference(_startsAt) > const Duration(days: 1)) {
-      setState(() {
-        _submissionError = 'Activities can last no longer than 24 hours.';
       });
       return;
     }
@@ -133,30 +143,21 @@ class _CreateActivityScreenState extends State<CreateActivityScreen> {
     });
 
     try {
-      await _activityRepository.createActivity(
-        ActivityDraft(
-          title: _titleController.text.trim(),
-          description: _optionalValue(_descriptionController.text),
-          categoryId: _categoryId!,
-          campus: widget.campus,
-          latitude: _latitude!,
-          longitude: _longitude!,
-          startsAt: _startsAt,
-          endsAt: _endsAt,
-          indoorOutdoor: _indoorOutdoor!,
-          building: _optionalValue(_buildingController.text),
-          floor: _optionalValue(_floorController.text),
-          roomOrArea: _optionalValue(_roomOrAreaController.text),
-        ),
-      );
+      await _activityRepository.createActivity(draft);
 
       if (!mounted) return;
       Navigator.of(context).pop(true);
     } catch (error) {
       if (!mounted) return;
+      final message = error is PostgrestException
+          ? 'Activity could not be created. Supabase reported: ${error.message} '
+              'The activity database may not be available yet. '
+              'Apply the migration in Supabase first.'
+          : 'Activity could not be created. The activity database may not '
+              'be available yet. Please try again later.';
+
       setState(() {
-        _submissionError =
-            'Activity could not be created. The activity database may not be available yet. Please try again later.';
+        _submissionError = message;
       });
     } finally {
       if (mounted) {

@@ -34,6 +34,12 @@ class ActivityRepository {
         .toList();
   }
 
+  /// Returns the current authenticated user if present. Useful for UI hints
+  /// when the feature is being connected to a database migration.
+  String? getAuthenticatedUserId() {
+    return _supabase.auth.currentUser?.id;
+  }
+
   /// Creates an activity for the currently authenticated Supabase user.
   ///
   /// The activities migration assigns creator_id from auth.uid(), so this

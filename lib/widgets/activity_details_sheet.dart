@@ -21,11 +21,17 @@ class _ActivityDetailsSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final localizations = MaterialLocalizations.of(context);
     final locationDetails = <String>[
-      if (activity.indoorOutdoor != null) activity.indoorOutdoor!,
-      if (activity.building != null) activity.building!,
-      if (activity.floor != null) 'Floor ${activity.floor}',
-      if (activity.roomOrArea != null) activity.roomOrArea!,
+      if (activity.indoorOutdoor != null) _capitalize(activity.indoorOutdoor!),
+      if (activity.building != null && activity.building!.trim().isNotEmpty)
+        'Building ${activity.building!}',
+      if (activity.floor != null && activity.floor!.trim().isNotEmpty)
+        'Floor ${activity.floor!}',
+      if (activity.roomOrArea != null && activity.roomOrArea!.trim().isNotEmpty)
+        'Room/area ${activity.roomOrArea!}',
     ];
+
+    final startLabel = localizations.formatMediumDate(activity.startsAt.toLocal());
+    final endLabel = localizations.formatMediumDate(activity.endsAt.toLocal());
 
     return SafeArea(
       top: false,
@@ -57,7 +63,12 @@ class _ActivityDetailsSheet extends StatelessWidget {
                 context,
               ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
             ),
-            if (activity.description != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              '${activity.category.label} • ${_capitalize(activity.campus)} campus',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            if (activity.description != null && activity.description!.trim().isNotEmpty) ...[
               const SizedBox(height: 10),
               Text(activity.description!),
             ],
@@ -65,14 +76,15 @@ class _ActivityDetailsSheet extends StatelessWidget {
             _DetailRow(
               icon: Icons.schedule_outlined,
               text:
+                  '${localizations.formatMediumDate(activity.startsAt.toLocal())} '
                   '${localizations.formatTimeOfDay(TimeOfDay.fromDateTime(activity.startsAt.toLocal()))}'
-                  ' – ${localizations.formatTimeOfDay(TimeOfDay.fromDateTime(activity.endsAt.toLocal()))}',
+                  ' – ${endLabel == startLabel ? localizations.formatTimeOfDay(TimeOfDay.fromDateTime(activity.endsAt.toLocal())) : localizations.formatMediumDate(activity.endsAt.toLocal()) + ' ' + localizations.formatTimeOfDay(TimeOfDay.fromDateTime(activity.endsAt.toLocal()))}',
             ),
             if (locationDetails.isNotEmpty) ...[
               const SizedBox(height: 12),
               _DetailRow(
                 icon: Icons.location_on_outlined,
-                text: locationDetails.join(' · '),
+                text: locationDetails.join(' • '),
               ),
             ],
             const SizedBox(height: 8),
@@ -80,6 +92,11 @@ class _ActivityDetailsSheet extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _capitalize(String value) {
+    if (value.isEmpty) return value;
+    return value[0].toUpperCase() + value.substring(1);
   }
 }
 
