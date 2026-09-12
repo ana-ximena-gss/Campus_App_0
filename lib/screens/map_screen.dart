@@ -260,14 +260,67 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
           children: [
             Text(
               data.title,
-              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+              ),
             ),
             const SizedBox(height: 12),
             Text(
               data.description,
-              style: const TextStyle(fontSize: 18, color: Colors.black87),
+              style: const TextStyle(
+                fontSize: 18,
+                color: Colors.black87,
+              ),
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 24),
+
+            // --- Event Table ---
+            const Text(
+              'Event Table (W.I.P.)',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+
+            // Hardcoded table for now.
+            // This can be connected to Supabase later.
+            DataTable(
+              columns: const [
+                DataColumn(
+                  label: Text('Event Name'),
+                ),
+                DataColumn(
+                  label: Text('Time'),
+                ),
+              ],
+              rows: const [
+                DataRow(
+                  cells: [
+                    DataCell(
+                      Text('Sample Event 1'),
+                    ),
+                    DataCell(
+                      Text('11:00 AM'),
+                    ),
+                  ],
+                ),
+                DataRow(
+                  cells: [
+                    DataCell(
+                      Text('Sample Event 2'),
+                    ),
+                    DataCell(
+                      Text('2:00 PM'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 16),
           ],
         ),
       ),
