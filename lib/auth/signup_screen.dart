@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../utils/username_generator.dart';
+
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
 
@@ -11,7 +13,6 @@ class SignupScreen extends StatefulWidget {
 class _SignupScreenState extends State<SignupScreen> {
   final _formKey = GlobalKey<FormState>();
 
-  final _fullNameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
@@ -30,7 +31,6 @@ class _SignupScreenState extends State<SignupScreen> {
 
   @override
   void dispose() {
-    _fullNameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
@@ -52,11 +52,15 @@ class _SignupScreenState extends State<SignupScreen> {
     try {
       final email = _emailController.text.trim().toLowerCase();
 
+      // Generate a random two-noun username and make sure
+      // it does not already exist in the profiles table.
+      final username = await UsernameGenerator.generateUnique();
+
       final response = await _supabase.auth.signUp(
         email: email,
         password: _passwordController.text,
         data: {
-          'full_name': _fullNameController.text.trim(),
+          'username': username,
         },
       );
 
@@ -68,8 +72,10 @@ class _SignupScreenState extends State<SignupScreen> {
 
       if (response.session != null) {
         // Email confirmation is currently disabled, so the student
-        // receives a session immediately. Return to the root route,
-        // where AuthGate will display the campus map.
+        // receives a session immediately.
+        //
+        // Return to the root route where AuthGate can display
+        // the authenticated part of the app.
         Navigator.of(context).popUntil(
           (route) => route.isFirst,
         );
@@ -79,8 +85,9 @@ class _SignupScreenState extends State<SignupScreen> {
           builder: (context) {
             return AlertDialog(
               title: const Text('Check your email'),
-              content: const Text(
-                'Your account was created. Confirm your email before signing in.',
+              content: Text(
+                'Your account was created with the username '
+                '"$username". Confirm your email before signing in.',
               ),
               actions: [
                 TextButton(
@@ -103,6 +110,14 @@ class _SignupScreenState extends State<SignupScreen> {
 
       setState(() {
         _errorMessage = error.message;
+      });
+    } on PostgrestException catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        _errorMessage =
+            'Unable to generate a username or create the profile.\n'
+            '${error.message}';
       });
     } catch (error) {
       if (!mounted) return;
@@ -150,6 +165,7 @@ class _SignupScreenState extends State<SignupScreen> {
                           color: Color(0xFFF05023),
                         ),
                         const SizedBox(height: 14),
+
                         Text(
                           'Student registration',
                           style:
@@ -157,39 +173,25 @@ class _SignupScreenState extends State<SignupScreen> {
                                     fontWeight: FontWeight.bold,
                                   ),
                         ),
+
                         const SizedBox(height: 8),
+
                         const Text(
                           'A valid @utrgv.edu email address is required.',
                           textAlign: TextAlign.center,
                         ),
-                        const SizedBox(height: 26),
-                        TextFormField(
-                          controller: _fullNameController,
-                          textCapitalization: TextCapitalization.words,
-                          textInputAction: TextInputAction.next,
-                          autofillHints: const [
-                            AutofillHints.name,
-                          ],
-                          decoration: const InputDecoration(
-                            labelText: 'Full name',
-                            prefixIcon: Icon(Icons.person_outline),
-                            border: OutlineInputBorder(),
-                          ),
-                          validator: (value) {
-                            final name = value?.trim() ?? '';
 
-                            if (name.isEmpty) {
-                              return 'Enter your full name.';
-                            }
+                        const SizedBox(height: 8),
 
-                            if (name.length < 2) {
-                              return 'Enter a valid full name.';
-                            }
-
-                            return null;
-                          },
+                        Text(
+                          'A random username will be assigned automatically.',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.bodySmall,
                         ),
-                        const SizedBox(height: 16),
+
+                        const SizedBox(height: 26),
+
+                        // UTRGV EMAIL
                         TextFormField(
                           controller: _emailController,
                           keyboardType: TextInputType.emailAddress,
@@ -219,7 +221,10 @@ class _SignupScreenState extends State<SignupScreen> {
                             return null;
                           },
                         ),
+
                         const SizedBox(height: 16),
+
+                        // PASSWORD
                         TextFormField(
                           controller: _passwordController,
                           obscureText: _obscurePassword,
@@ -259,7 +264,10 @@ class _SignupScreenState extends State<SignupScreen> {
                             return null;
                           },
                         ),
+
                         const SizedBox(height: 16),
+
+                        // CONFIRM PASSWORD
                         TextFormField(
                           controller: _confirmPasswordController,
                           obscureText: _obscureConfirmation,
@@ -306,6 +314,7 @@ class _SignupScreenState extends State<SignupScreen> {
                             return null;
                           },
                         ),
+
                         if (_errorMessage != null) ...[
                           const SizedBox(height: 16),
                           Container(
@@ -327,7 +336,9 @@ class _SignupScreenState extends State<SignupScreen> {
                             ),
                           ),
                         ],
+
                         const SizedBox(height: 22),
+
                         SizedBox(
                           width: double.infinity,
                           child: FilledButton.icon(
@@ -352,12 +363,13 @@ class _SignupScreenState extends State<SignupScreen> {
                             ),
                           ),
                         ),
+
                         const SizedBox(height: 14),
+
                         Text(
                           'All new accounts are created with the student role.',
                           textAlign: TextAlign.center,
-                          style:
-                              Theme.of(context).textTheme.bodySmall,
+                          style: Theme.of(context).textTheme.bodySmall,
                         ),
                       ],
                     ),
