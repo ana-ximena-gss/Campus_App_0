@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:campus_app/models/activity.dart';
 import 'package:campus_app/screens/activities/create_activity_screen.dart';
@@ -247,9 +247,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   }
 
   void _showLocationDetails(LocationData data) {
-    // Local state for the marker counter.
-    int tapCount = 0;
-    bool isUpdating = false;
+    // simple true/false switch for other view
+    bool showOtherView = false;
 
     showModalBottomSheet<void>(
       context: context,
@@ -260,6 +259,36 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
         // StatefulBuilder allows the UI inside the modal to update.
         return StatefulBuilder(
           builder: (BuildContext context, StateSetter setModalState) {
+            if (showOtherView) {
+              return Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Align pushes the button to the top right corner
+                    Align(
+                      alignment: Alignment.topRight,
+                      child: IconButton(
+                        icon: const Icon(Icons.close), // You can also use Icons.arrow_back
+                        onPressed: () {
+                          // Tell the modal to rebuild and show the original view
+                          setModalState(() {
+                            showOtherView = false;
+                          });
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 30),
+                    const Text(
+                      'Nothing for right now, maybe for the game or some',
+                      style: TextStyle(fontSize: 18, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 60), // Extra padding at the bottom
+                  ],
+                ),
+              );
+            }
+
             return Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
@@ -337,32 +366,14 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       ElevatedButton.icon(
-                        onPressed: isUpdating
-                            ? null
-                            : () async {
-                                // Show the loading state.
-                                setModalState(() {
-                                  isUpdating = true;
-                                });
-
-                                // Increment the local tap counter.
-                                tapCount++;
-
-                                // Supabase update can be added later.
-                                setModalState(() {
-                                  isUpdating = false;
-                                });
-                              },
-                        icon: isUpdating
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.touch_app),
-                        label: const Text('Tap Marker'),
+                        onPressed: () {
+                          // Tell the modal to rebuild and show the other view
+                          setModalState(() {
+                            showOtherView = true;
+                          });
+                        },
+                        icon: const Icon(Icons.touch_app),
+                        label: const Text('Tap to Start'),
                       ),
                     ],
                   ),
