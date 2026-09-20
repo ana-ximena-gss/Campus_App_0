@@ -1,67 +1,23 @@
+import 'package:campus_app/models/activity.dart';
+import 'package:campus_app/providers/activity_providers.dart';
 import 'package:campus_app/screens/map_screen.dart';
 import 'package:campus_app/widgets/logout_button.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class AdminDashboard extends StatefulWidget {
+class AdminDashboard extends ConsumerStatefulWidget {
   const AdminDashboard({super.key});
 
   @override
-  State<AdminDashboard> createState() => _AdminDashboardState();
+  ConsumerState<AdminDashboard> createState() => _AdminDashboardState();
 }
 
-class _AdminDashboardState extends State<AdminDashboard> {
+class _AdminDashboardState extends ConsumerState<AdminDashboard> {
   int _selectedIndex = 0;
 
-  final List<_PlaceholderTicket> _tickets = [
-    _PlaceholderTicket(
-      id: 'activity-001',
-      creatorId: 'user-001',
-      title: 'Volleyball at the REC',
-      description: 'Looking for students to play volleyball this afternoon.',
-      category: 'social',
-      campus: 'edinburg',
-      latitude: 26.304551,
-      longitude: -98.174165,
-      startsAt: DateTime.now().add(const Duration(hours: 1)),
-      endsAt: DateTime.now().add(const Duration(hours: 3)),
-      indoorOutdoor: 'indoor',
-      building: 'UREC',
-      floor: '1',
-      roomOrArea: 'Volleyball Court',
-    ),
-    _PlaceholderTicket(
-      id: 'activity-002',
-      creatorId: 'user-002',
-      title: 'Computer Science Study Group',
-      description: 'Study session before the upcoming exam.',
-      category: 'academic',
-      campus: 'edinburg',
-      latitude: 26.304800,
-      longitude: -98.173900,
-      startsAt: DateTime.now().add(const Duration(hours: 2)),
-      endsAt: DateTime.now().add(const Duration(hours: 4)),
-      indoorOutdoor: 'indoor',
-      building: 'EENGR',
-      floor: '1',
-      roomOrArea: '1.300',
-    ),
-    _PlaceholderTicket(
-      id: 'activity-003',
-      creatorId: 'user-003',
-      title: 'Chess Meetup',
-      description: 'Casual meetup. Beginners welcome.',
-      category: 'social',
-      campus: 'brownsville',
-      latitude: 25.892910,
-      longitude: -97.489224,
-      startsAt: DateTime.now().add(const Duration(hours: 1)),
-      endsAt: DateTime.now().add(const Duration(hours: 2)),
-      indoorOutdoor: 'indoor',
-      building: 'Student Union',
-      floor: '1',
-      roomOrArea: 'Lobby',
-    ),
-  ];
+  /// Keeps track of tickets currently being approved/rejected.
+  /// This prevents the admin from pressing a button multiple times.
+  final Set<String> _processingTicketIds = {};
 
   void _onNavigationTapped(int index) {
     setState(() {
@@ -69,37 +25,86 @@ class _AdminDashboardState extends State<AdminDashboard> {
     });
   }
 
-  void _acceptTicket(_PlaceholderTicket ticket) {
+  Future<void> _acceptTicket(Activity ticket) async {
+    if (_processingTicketIds.contains(ticket.id)) {
+      return;
+    }
+
     setState(() {
-      _tickets.remove(ticket);
+      _processingTicketIds.add(ticket.id);
     });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('${ticket.title} accepted'),
-      ),
-    );
+    try {
+      final repository = ref.read(activityRepositoryProvider);
+
+      await repository.approveActivity(ticket.id);
+
+      if (!mounted) return;
+
+      // Tell Riverpod that the pending ticket list is now stale.
+      // This causes Supabase to be queried again.
+      ref.invalidate(pendingActivitiesProvider);
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('${ticket.title} approved')));
+    } catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not approve ${ticket.title}: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _processingTicketIds.remove(ticket.id);
+        });
+      }
+    }
   }
 
-  void _rejectTicket(_PlaceholderTicket ticket) {
+  Future<void> _rejectTicket(Activity ticket) async {
+    if (_processingTicketIds.contains(ticket.id)) {
+      return;
+    }
+
     setState(() {
-      _tickets.remove(ticket);
+      _processingTicketIds.add(ticket.id);
     });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('${ticket.title} rejected'),
-      ),
-    );
+    try {
+      final repository = ref.read(activityRepositoryProvider);
+
+      await repository.rejectActivity(ticket.id);
+
+      if (!mounted) return;
+
+      // Reload the list from Supabase.
+      ref.invalidate(pendingActivitiesProvider);
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('${ticket.title} rejected')));
+    } catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not reject ${ticket.title}: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _processingTicketIds.remove(ticket.id);
+        });
+      }
+    }
   }
 
   String _formatDateTime(DateTime value) {
     final localizations = MaterialLocalizations.of(context);
 
-    return '${localizations.formatMediumDate(value)} '
-        '${localizations.formatTimeOfDay(
-      TimeOfDay.fromDateTime(value),
-    )}';
+    return '${localizations.formatMediumDate(value.toLocal())} '
+        '${localizations.formatTimeOfDay(TimeOfDay.fromDateTime(value.toLocal()))}';
   }
 
   String _formatCampus(String campus) {
@@ -129,10 +134,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     return Scaffold(
       body: IndexedStack(
         index: _selectedIndex,
-        children: [
-          _buildTicketScreen(),
-          const MapScreen(),
-        ],
+        children: [_buildTicketScreen(), const MapScreen()],
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
@@ -154,77 +156,105 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   Widget _buildTicketScreen() {
+    final pendingTickets = ref.watch(pendingActivitiesProvider);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Admin Dashboard'),
-        actions: const [
-          LogoutButton(),
-          SizedBox(width: 8),
+        actions: [
+          IconButton(
+            tooltip: 'Refresh tickets',
+            onPressed: () {
+              ref.invalidate(pendingActivitiesProvider);
+            },
+            icon: const Icon(Icons.refresh),
+          ),
+          const LogoutButton(),
+          const SizedBox(width: 8),
         ],
       ),
       body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.admin_panel_settings_outlined,
-                    size: 32,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Event Approval Tickets',
-                          style:
-                              Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '${_tickets.length} pending',
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Divider(),
-            Expanded(
-              child: _tickets.isEmpty
-                  ? const _EmptyTicketView()
-                  : ListView.separated(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: _tickets.length,
-                      separatorBuilder: (_, __) =>
-                          const SizedBox(height: 12),
-                      itemBuilder: (context, index) {
-                        final ticket = _tickets[index];
-
-                        return _TicketCard(
-                          ticket: ticket,
-                          formattedCampus: _formatCampus(ticket.campus),
-                          formattedStart: _formatDateTime(ticket.startsAt),
-                          formattedEnd: _formatDateTime(ticket.endsAt),
-                          formattedIndoorOutdoor:
-                              _formatIndoorOutdoor(ticket.indoorOutdoor),
-                          onAccept: () => _acceptTicket(ticket),
-                          onReject: () => _rejectTicket(ticket),
-                        );
-                      },
-                    ),
-            ),
-          ],
+        child: pendingTickets.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (error, stackTrace) => _TicketErrorView(
+            error: error.toString(),
+            onRetry: () {
+              ref.invalidate(pendingActivitiesProvider);
+            },
+          ),
+          data: (tickets) => _buildTicketList(tickets),
         ),
       ),
+    );
+  }
+
+  Widget _buildTicketList(List<Activity> tickets) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+          child: Row(
+            children: [
+              const Icon(Icons.admin_panel_settings_outlined, size: 32),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Event Approval Tickets',
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${tickets.length} pending',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const Divider(),
+        Expanded(
+          child: tickets.isEmpty
+              ? const _EmptyTicketView()
+              : RefreshIndicator(
+                  onRefresh: () async {
+                    ref.invalidate(pendingActivitiesProvider);
+
+                    await ref.read(pendingActivitiesProvider.future);
+                  },
+                  child: ListView.separated(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: tickets.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 12),
+                    itemBuilder: (context, index) {
+                      final ticket = tickets[index];
+                      final isProcessing = _processingTicketIds.contains(
+                        ticket.id,
+                      );
+
+                      return _TicketCard(
+                        ticket: ticket,
+                        formattedCampus: _formatCampus(ticket.campus),
+                        formattedStart: _formatDateTime(ticket.startsAt),
+                        formattedEnd: _formatDateTime(ticket.endsAt),
+                        formattedIndoorOutdoor: _formatIndoorOutdoor(
+                          ticket.indoorOutdoor,
+                        ),
+                        isProcessing: isProcessing,
+                        onAccept: () => _acceptTicket(ticket),
+                        onReject: () => _rejectTicket(ticket),
+                      );
+                    },
+                  ),
+                ),
+        ),
+      ],
     );
   }
 }
@@ -236,15 +266,17 @@ class _TicketCard extends StatelessWidget {
     required this.formattedStart,
     required this.formattedEnd,
     required this.formattedIndoorOutdoor,
+    required this.isProcessing,
     required this.onAccept,
     required this.onReject,
   });
 
-  final _PlaceholderTicket ticket;
+  final Activity ticket;
   final String formattedCampus;
   final String formattedStart;
   final String formattedEnd;
   final String formattedIndoorOutdoor;
+  final bool isProcessing;
   final VoidCallback onAccept;
   final VoidCallback onReject;
 
@@ -266,9 +298,7 @@ class _TicketCard extends StatelessWidget {
                     color: Theme.of(context).colorScheme.primaryContainer,
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(
-                    Icons.confirmation_number_outlined,
-                  ),
+                  child: const Icon(Icons.confirmation_number_outlined),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -277,10 +307,8 @@ class _TicketCard extends StatelessWidget {
                     children: [
                       Text(
                         ticket.title,
-                        style:
-                            Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                ),
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 4),
                       Text(
@@ -290,48 +318,33 @@ class _TicketCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                const Chip(
-                  avatar: Icon(
-                    Icons.schedule,
-                    size: 16,
-                  ),
-                  label: Text('Pending'),
+                Chip(
+                  avatar: const Icon(Icons.schedule, size: 16),
+                  label: Text(ticket.ticketStatus),
                 ),
               ],
             ),
-
             const SizedBox(height: 16),
-
-            Text(
-              ticket.description ?? 'No description provided.',
-            ),
-
+            Text(ticket.description ?? 'No description provided.'),
             const SizedBox(height: 20),
-
             _TicketDetail(
               icon: Icons.person_outline,
               label: 'Creator ID',
               value: ticket.creatorId,
             ),
-
             const SizedBox(height: 8),
-
             _TicketDetail(
               icon: Icons.category_outlined,
               label: 'Category',
-              value: ticket.category,
+              value: ticket.category.label,
             ),
-
             const SizedBox(height: 8),
-
             _TicketDetail(
               icon: Icons.school_outlined,
               label: 'Campus',
               value: formattedCampus,
             ),
-
             const SizedBox(height: 8),
-
             _TicketDetail(
               icon: Icons.location_on_outlined,
               label: 'Coordinates',
@@ -339,15 +352,12 @@ class _TicketCard extends StatelessWidget {
                   '${ticket.latitude.toStringAsFixed(6)}, '
                   '${ticket.longitude.toStringAsFixed(6)}',
             ),
-
             const SizedBox(height: 8),
-
             _TicketDetail(
               icon: Icons.place_outlined,
               label: 'Type',
               value: formattedIndoorOutdoor,
             ),
-
             if (ticket.building != null) ...[
               const SizedBox(height: 8),
               _TicketDetail(
@@ -356,7 +366,6 @@ class _TicketCard extends StatelessWidget {
                 value: ticket.building!,
               ),
             ],
-
             if (ticket.floor != null) ...[
               const SizedBox(height: 8),
               _TicketDetail(
@@ -365,7 +374,6 @@ class _TicketCard extends StatelessWidget {
                 value: ticket.floor!,
               ),
             ],
-
             if (ticket.roomOrArea != null) ...[
               const SizedBox(height: 8),
               _TicketDetail(
@@ -374,52 +382,52 @@ class _TicketCard extends StatelessWidget {
                 value: ticket.roomOrArea!,
               ),
             ],
-
             const SizedBox(height: 8),
-
             _TicketDetail(
               icon: Icons.schedule_outlined,
               label: 'Starts',
               value: formattedStart,
             ),
-
             const SizedBox(height: 8),
-
             _TicketDetail(
               icon: Icons.schedule_outlined,
               label: 'Ends',
               value: formattedEnd,
             ),
-
             const SizedBox(height: 20),
-
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: onReject,
-                    icon: const Icon(Icons.close),
-                    label: const Text('Reject'),
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size.fromHeight(48),
+            if (isProcessing)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: CircularProgressIndicator(),
+                ),
+              )
+            else
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: onReject,
+                      icon: const Icon(Icons.close),
+                      label: const Text('Reject'),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(48),
+                      ),
                     ),
                   ),
-                ),
-
-                const SizedBox(width: 12),
-
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: onAccept,
-                    icon: const Icon(Icons.check),
-                    label: const Text('Accept'),
-                    style: FilledButton.styleFrom(
-                      minimumSize: const Size.fromHeight(48),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: onAccept,
+                      icon: const Icon(Icons.check),
+                      label: const Text('Accept'),
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size.fromHeight(48),
+                      ),
                     ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
           ],
         ),
       ),
@@ -443,20 +451,10 @@ class _TicketDetail extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(
-          icon,
-          size: 18,
-        ),
+        Icon(icon, size: 18),
         const SizedBox(width: 8),
-        Text(
-          '$label: ',
-          style: const TextStyle(
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        Expanded(
-          child: Text(value),
-        ),
+        Text('$label: ', style: const TextStyle(fontWeight: FontWeight.w600)),
+        Expanded(child: Text(value)),
       ],
     );
   }
@@ -481,9 +479,9 @@ class _EmptyTicketView extends StatelessWidget {
             const SizedBox(height: 16),
             Text(
               'No pending tickets',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             const Text(
@@ -497,36 +495,44 @@ class _EmptyTicketView extends StatelessWidget {
   }
 }
 
-class _PlaceholderTicket {
-  const _PlaceholderTicket({
-    required this.id,
-    required this.creatorId,
-    required this.title,
-    required this.description,
-    required this.category,
-    required this.campus,
-    required this.latitude,
-    required this.longitude,
-    required this.startsAt,
-    required this.endsAt,
-    required this.indoorOutdoor,
-    required this.building,
-    required this.floor,
-    required this.roomOrArea,
-  });
+class _TicketErrorView extends StatelessWidget {
+  const _TicketErrorView({required this.error, required this.onRetry});
 
-  final String id;
-  final String creatorId;
-  final String title;
-  final String? description;
-  final String category;
-  final String campus;
-  final double latitude;
-  final double longitude;
-  final DateTime startsAt;
-  final DateTime endsAt;
-  final String? indoorOutdoor;
-  final String? building;
-  final String? floor;
-  final String? roomOrArea;
+  final String error;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.error_outline,
+              size: 64,
+              color: Theme.of(context).colorScheme.error,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Could not load pending tickets',
+              textAlign: TextAlign.center,
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            Text(error, textAlign: TextAlign.center),
+            const SizedBox(height: 20),
+            FilledButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Try again'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
