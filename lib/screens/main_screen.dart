@@ -1,6 +1,8 @@
-// Basically the Bottom Nav Bar "Screen"
+import 'package:campus_app/models/activity.dart';
+import 'package:campus_app/screens/activities/list_of_activities_screen.dart';
 import 'package:flutter/material.dart';
-import 'map_screen.dart'; 
+
+import 'map_screen.dart';
 import 'setting_screen.dart';
 import 'user_screen.dart';
 
@@ -12,18 +14,29 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> {
-  int _selectedIndex = 0;   // starts at 0 to load the MapScreen first
+  int _selectedIndex = 0;
 
-  final List<Widget> _screens = [
-    const MapScreen(),      //Index 0
-    const SettingsScreen(), //Index 1
-    const UserScreen(),     //Index 2
-  ];
+  Activity? _selectedActivity;
+
+  // This changes every time an activity is selected from the list.
+  // MapScreen uses it to know that it should move to a new activity.
+  int _mapFocusRequest = 0;
 
   void _onItemTapped(int index) {
     setState(() {
-      // Updates the selected index when a bottom navigation item is tapped
       _selectedIndex = index;
+    });
+  }
+
+  void _showActivityOnMap(Activity activity) {
+    setState(() {
+      _selectedActivity = activity;
+
+      // Tell MapScreen that there is a new activity to focus on.
+      _mapFocusRequest++;
+
+      // Switch to the Map tab.
+      _selectedIndex = 0;
     });
   }
 
@@ -32,17 +45,36 @@ class _MainScreenState extends State<MainScreen> {
     return Scaffold(
       body: IndexedStack(
         index: _selectedIndex,
-        children: _screens,
+        children: [
+          MapScreen(
+            selectedActivity: _selectedActivity,
+            focusRequest: _mapFocusRequest,
+          ),
+
+          ActivityListScreen(
+            onViewOnMap: _showActivityOnMap,
+          ),
+
+          const SettingsScreen(),
+
+          const UserScreen(),
+        ],
       ),
+
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: _onItemTapped,
-        selectedItemColor: Colors.blue, 
+        type: BottomNavigationBarType.fixed,
+        selectedItemColor: Colors.blue,
         unselectedItemColor: Colors.grey,
         items: const [
           BottomNavigationBarItem(
             icon: Icon(Icons.map),
             label: 'Map',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.list_alt),
+            label: 'Activities',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.settings),
