@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:campus_app/data/campus_locations.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -17,27 +18,9 @@ class MapScreen extends StatefulWidget {
   State<MapScreen> createState() => _MapScreenState();
 }
 
-/// A permanent campus location. This is intentionally different from an
-/// [Activity], which is temporary and loaded from Supabase.
-class LocationData {
-  const LocationData({
-    required this.title,
-    required this.description,
-    required this.coordinates,
-  });
-
-  final String title;
-  final String description;
-  final Position coordinates;
-}
-
 class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   static final Point utrgvEdinburgCampus = Point(
     coordinates: Position(-98.174165, 26.304551),
-  );
-
-  static final Point utrgvBrownsvilleCampus = Point(
-    coordinates: Position(-97.48619, 25.89151),
   );
 
   final ActivityRepository _activityRepository = ActivityRepository();
@@ -50,7 +33,6 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   Timer? _activityRefreshTimer;
   int _activityRefreshRequest = 0;
 
-  bool _isBrownsville = false;
   bool _isRequestingLocation = false;
   bool _isLoadingActivities = false;
   String? _activityLoadError;
@@ -62,37 +44,6 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     bearing: 0.0,
   );
 
-  /// These are permanent map locations, not student-created activities.
-  final List<LocationData> customLocations = [
-    LocationData(
-      title: 'Utrgv Sign',
-      description: 'A big sign what reads UTRGV',
-      coordinates: Position(-98.177886, 26.304073),
-    ),
-    LocationData(
-      title: 'Utrgv Fountian',
-      description: 'Edinburg Cool looking fountain',
-      coordinates: Position(-98.176061, 26.304802),
-    ),
-    LocationData(
-      title: 'Utrgv Statue',
-      description: '[PlaceHolder Fun Fact]',
-      coordinates: Position(-98.174068, 26.304240),
-    ),
-    LocationData(
-      title: 'Utrgv Quad',
-      description: 'PlaceHolder here :3',
-      coordinates: Position(-98.175415, 26.306487),
-    ),
-    LocationData(
-      title: 'Sundial',
-      description:
-          '[Testing a long description to see how it works if the ai fun facts wants to yap a lot or not lol]',
-      coordinates: Position(-98.170984, 26.306127),
-    ),
-  ];
-
-  String get _selectedCampus => _isBrownsville ? 'brownsville' : 'edinburg';
 
   @override
   void initState() {
@@ -121,6 +72,17 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     await _setUpActivityMarkers();
   }
 
+  //Used to remove the default Mapbox POI labels from the map.
+  Future<void> _onStyleLoaded(StyleLoadedEventData event) async {
+  if (_mapboxMap == null) return;
+
+  await _mapboxMap!.style.setStyleImportConfigProperty(
+    "basemap",
+    "showPointOfInterestLabels",
+    false,
+  );
+}
+
   Future<void> _addPermanentLocationMarkers() async {
     if (_mapboxMap == null) return;
 
@@ -129,6 +91,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
 
     final bytes = await rootBundle.load('assets/test_marker.png');
     final imageData = bytes.buffer.asUint8List();
+
     final markerOptions = customLocations
         .map(
           (location) => PointAnnotationOptions(
@@ -140,7 +103,9 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
           ),
         )
         .toList();
-    final annotations = await _permanentLocationAnnotationManager!.createMulti(
+
+    final annotations =
+        await _permanentLocationAnnotationManager!.createMulti(
       markerOptions,
     );
 
@@ -166,6 +131,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
 
     _activityAnnotationManager = await _mapboxMap!.annotations
         .createCircleAnnotationManager();
+
     _activityAnnotationManager!.tapEvents(
       onTap: (annotation) {
         final activity = _activityAnnotationDataMap[annotation.id];
@@ -176,20 +142,19 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     );
 
     await _refreshActivities();
+
     _activityRefreshTimer = Timer.periodic(
       const Duration(minutes: 1),
       (_) => unawaited(_refreshActivities()),
     );
   }
 
-  /// The database query excludes cancelled, future, and expired activities.
-  /// A periodic refresh and app-resume refresh remove expired map markers even
-  /// though time passing does not trigger a Supabase realtime event.
+  /// Loads only the active activities for the Edinburg campus.
   Future<void> _refreshActivities() async {
     final activityManager = _activityAnnotationManager;
     if (activityManager == null) return;
+
     final request = ++_activityRefreshRequest;
-    final campus = _selectedCampus;
 
     if (mounted) {
       setState(() {
@@ -199,8 +164,9 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     }
 
     try {
-      final activities = await _activityRepository.fetchActiveActivities(
-        campus: campus,
+      final activities =
+          await _activityRepository.fetchActiveActivities(
+        campus: 'edinburg',
       );
 
       if (!mounted || request != _activityRefreshRequest) return;
@@ -213,7 +179,10 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
             .map(
               (activity) => CircleAnnotationOptions(
                 geometry: Point(
-                  coordinates: Position(activity.longitude, activity.latitude),
+                  coordinates: Position(
+                    activity.longitude,
+                    activity.latitude,
+                  ),
                 ),
                 circleColor: activity.category.color.toARGB32(),
                 circleRadius: 10,
@@ -246,6 +215,18 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     }
   }
 
+  /// Moves the map back to the UTRGV Edinburg campus.
+  void _goToEdinburgCampus() {
+    setState(() {
+      _viewport = CameraViewportState(
+        center: utrgvEdinburgCampus,
+        zoom: 16.0,
+        pitch: 45.0,
+        bearing: 0.0,
+      );
+    });
+  }
+
   void _showLocationDetails(LocationData data) {
     // simple true/false switch for other view
     bool showOtherView = false;
@@ -253,7 +234,9 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     showModalBottomSheet<void>(
       context: context,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(20),
+        ),
       ),
       builder: (context) {
         // StatefulBuilder allows the UI inside the modal to update.
@@ -269,7 +252,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                     Align(
                       alignment: Alignment.topRight,
                       child: IconButton(
-                        icon: const Icon(Icons.close), // You can also use Icons.arrow_back
+                        icon: const Icon(Icons.close),
                         onPressed: () {
                           // Tell the modal to rebuild and show the original view
                           setModalState(() {
@@ -281,9 +264,12 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                     const SizedBox(height: 30),
                     const Text(
                       'Nothing for right now, maybe for the game or some',
-                      style: TextStyle(fontSize: 18, color: Colors.grey),
+                      style: TextStyle(
+                        fontSize: 18,
+                        color: Colors.grey,
+                      ),
                     ),
-                    const SizedBox(height: 60), // Extra padding at the bottom
+                    const SizedBox(height: 60),
                   ],
                 ),
               );
@@ -303,7 +289,6 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                     ),
                   ),
                   const SizedBox(height: 12),
-
                   Text(
                     data.description,
                     style: const TextStyle(
@@ -311,7 +296,6 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                       color: Colors.black87,
                     ),
                   ),
-
                   const SizedBox(height: 24),
 
                   // --- Event Table ---
@@ -395,6 +379,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
 
     try {
       final status = await Permission.locationWhenInUse.request();
+
       if (!mounted) return;
 
       if (status.isGranted) {
@@ -408,6 +393,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
         );
 
         if (!mounted) return;
+
         setState(() {
           _viewport = const FollowPuckViewportState(
             zoom: 17.0,
@@ -415,6 +401,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
             bearing: FollowPuckViewportStateBearingHeading(),
           );
         });
+
         return;
       }
 
@@ -432,8 +419,13 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       );
     } catch (error) {
       if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to start live location: $error')),
+        SnackBar(
+          content: Text(
+            'Unable to start live location: $error',
+          ),
+        ),
       );
     } finally {
       if (mounted) {
@@ -444,32 +436,22 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     }
   }
 
-  void _toggleCampus() {
-    setState(() {
-      _isBrownsville = !_isBrownsville;
-      _viewport = CameraViewportState(
-        center: _isBrownsville ? utrgvBrownsvilleCampus : utrgvEdinburgCampus,
-        zoom: 16.0,
-        pitch: 45.0,
-        bearing: 0.0,
-      );
-    });
-
-    unawaited(_refreshActivities());
-  }
-
   Future<void> _openCreateActivity() async {
     final mapboxMap = _mapboxMap;
+
     if (mapboxMap == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('The map is still loading. Please try again shortly.'),
+          content: Text(
+            'The map is still loading. Please try again shortly.',
+          ),
         ),
       );
       return;
     }
 
     Point? mapCenter;
+
     try {
       mapCenter = (await mapboxMap.getCameraState()).center;
     } catch (_) {
@@ -477,10 +459,11 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     }
 
     if (!mounted) return;
+
     final created = await Navigator.of(context).push<bool>(
       MaterialPageRoute<bool>(
         builder: (context) => CreateActivityScreen(
-          campus: _selectedCampus,
+          campus: 'edinburg',
           initialLatitude: mapCenter?.coordinates.lat.toDouble(),
           initialLongitude: mapCenter?.coordinates.lng.toDouble(),
         ),
@@ -494,6 +477,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
 
   Future<void> _recenterOnUser() async {
     final status = await Permission.locationWhenInUse.status;
+
     if (!status.isGranted) {
       await _enableLiveLocation();
       return;
@@ -514,7 +498,10 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
         content: const Text(
           'Location access is disabled. Enable it in your device settings.',
         ),
-        action: SnackBarAction(label: 'Settings', onPressed: openAppSettings),
+        action: SnackBarAction(
+          label: 'Settings',
+          onPressed: openAppSettings,
+        ),
       ),
     );
   }
@@ -528,7 +515,10 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
             key: const ValueKey('campus-map'),
             viewport: _viewport,
             onMapCreated: _onMapCreated,
+            //Need to take away the default Mapbox POI labels.
+            onStyleLoadedListener: _onStyleLoaded,
           ),
+
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -536,7 +526,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   GestureDetector(
-                    onTap: _toggleCampus,
+                    onTap: _goToEdinburgCampus,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 16,
@@ -546,35 +536,37 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(18),
                         boxShadow: const [
-                          BoxShadow(color: Colors.black26, blurRadius: 12),
+                          BoxShadow(
+                            color: Colors.black26,
+                            blurRadius: 12,
+                          ),
                         ],
                       ),
-                      child: Row(
+                      child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.location_on),
-                          const SizedBox(width: 8),
+                          Icon(Icons.location_on),
+                          SizedBox(width: 8),
                           Text(
-                            _isBrownsville
-                                ? 'Brownsville Campus'
-                                : 'Edinburg Campus',
-                            style: const TextStyle(
+                            'Edinburg Campus',
+                            style: TextStyle(
                               fontSize: 17,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          const Icon(Icons.swap_horiz, size: 20),
                         ],
                       ),
                     ),
                   ),
+
                   const Spacer(),
+
                   const LogoutButton(),
                 ],
               ),
             ),
           ),
+
           if (_isLoadingActivities || _activityLoadError != null)
             Positioned(
               left: 16,
@@ -596,7 +588,9 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                             SizedBox(
                               width: 18,
                               height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                              ),
                             ),
                             SizedBox(width: 10),
                             Text('Loading activities...'),
@@ -606,7 +600,9 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                           children: [
                             const Icon(Icons.error_outline),
                             const SizedBox(width: 10),
-                            Expanded(child: Text(_activityLoadError!)),
+                            Expanded(
+                              child: Text(_activityLoadError!),
+                            ),
                             IconButton(
                               tooltip: 'Retry activity loading',
                               onPressed: _refreshActivities,
@@ -619,6 +615,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
             ),
         ],
       ),
+
       floatingActionButton: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -632,12 +629,15 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
           FloatingActionButton(
             heroTag: 'recenter-location',
             tooltip: 'Center on my location',
-            onPressed: _isRequestingLocation ? null : _recenterOnUser,
+            onPressed:
+                _isRequestingLocation ? null : _recenterOnUser,
             child: _isRequestingLocation
                 ? const SizedBox(
                     width: 22,
                     height: 22,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                    ),
                   )
                 : const Icon(Icons.my_location),
           ),
