@@ -16,6 +16,7 @@ import 'package:flutter/services.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:campus_app/screens/notifications_screen.dart';
+import 'package:campus_app/services/activity_notification.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({
@@ -280,6 +281,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     super.initState();
 
     WidgetsBinding.instance.addObserver(this);
+
+    unawaited(_refreshNotificationBadge());
   }
 
   @override
@@ -326,6 +329,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       unawaited(_refreshActivities());
+      unawaited(_refreshNotificationBadge());
     }
   }
 
@@ -816,9 +820,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     final assetPath = _markerAssetForActivityCount(activityCount);
     // return if image is already loaded
     final cachedImage = _permanentMarkerImageCache[assetPath];
-    if (cachedImage != null) {
-      return cachedImage;
-    }
+    if (cachedImage != null) { return cachedImage; }
+
     // if not loaded then load, save, and return it
     final bytes = await rootBundle.load(assetPath);
     final imageData = bytes.buffer.asUint8List();
@@ -828,13 +831,9 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
 
   //Manages the setup of permanent markers, adds tap listeners, creates markers
   Future<void> _setUpPermanentLocationMarkers() async {
-    if (!_showLegacyPermanentLocationPins) {
-      return;
-    }
+    if (!_showLegacyPermanentLocationPins) { return; }
 
-    if (_mapboxMap == null) {
-      return;
-    }
+    if (_mapboxMap == null) { return; }
 
     _permanentLocationAnnotationManager = await _mapboxMap!.annotations
         .createPointAnnotationManager();
@@ -856,9 +855,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
 
   //redraws markers when count changes
   Future<void> _refreshPermanentLocationMarkers() async {
-    if (_permanentLocationAnnotationManager == null) {
-      return;
-    }
+    if (_permanentLocationAnnotationManager == null) { return; }
+
     // Implementation for refreshing permanent location markers
     //this remove old permanent markers
     await _permanentLocationAnnotationManager?.deleteAll();
@@ -903,9 +901,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _setUpActivityMarkers() async {
-    if (_mapboxMap == null) {
-      return;
-    }
+    if (_mapboxMap == null) { return; }
 
     _activityAnnotationManager = await _mapboxMap!.annotations
         .createCircleAnnotationManager();
@@ -938,6 +934,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
 
     _activityRefreshTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       unawaited(_refreshActivities());
+      unawaited(_refreshNotificationBadge());
     });
   }
 
@@ -945,9 +942,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   Future<void> _refreshActivities() async {
     final activityManager = _activityAnnotationManager;
 
-    if (activityManager == null) {
-      return;
-    }
+    if (activityManager == null) { return; }
 
     final request = ++_activityRefreshRequest;
 
@@ -1079,9 +1074,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
         }
       }
     } catch (error) {
-      if (!mounted || request != _activityRefreshRequest) {
-        return;
-      }
+      if (!mounted || request != _activityRefreshRequest) { return; }
 
       setState(() {
         _activityLoadError = 'Unable to load activities: $error';
@@ -1094,6 +1087,21 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       }
     }
   }
+
+  Future<void> _refreshNotificationBadge() async {
+  try {
+    final count =
+        await _notificationService.fetchUnreadCount();
+
+    if (!mounted) { return; }
+
+    setState(() { _unreadNotificationCount = count; });
+  } catch (error) {
+    debugPrint(
+      'Unable to load notification count: $error',
+    );
+  }
+}
 
   void _goToEdinburgCampus() {
     _showingUserLocation = false;
@@ -1205,9 +1213,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) { return; }
 
       showActivityDetailsSheet(
         context,
@@ -1345,9 +1351,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _enableLiveLocation() async {
-    if (_isRequestingLocation) {
-      return;
-    }
+    if (_isRequestingLocation) { return; }
 
     setState(() {
       _isRequestingLocation = true;
@@ -1355,10 +1359,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
 
     try {
       final status = await Permission.locationWhenInUse.request();
-
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) { return; }
 
       if (status.isGranted) {
         await _mapboxMap?.location.updateSettings(
@@ -1370,9 +1371,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
           ),
         );
 
-        if (!mounted) {
-          return;
-        }
+        if (!mounted) { return; }
 
         setState(() {
           _viewport = const FollowPuckViewportState(
@@ -1384,7 +1383,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
         return;
       }
 
-      if (status.isPermanentlyDenied || status.isRestricted) {
+      if (status.isPermanentlyDenied || status.isRestricted) { 
         _showLocationSettingsMessage();
         return;
       }
@@ -1397,9 +1396,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
         ),
       );
     } catch (error) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) { return; }
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Unable to start live location: $error')),
@@ -1513,15 +1510,49 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                   elevation: 4,
                   child: IconButton(
                     tooltip: 'Notifications',
-                    icon: const Icon(
-                      Icons.notifications_none,
-                      color: Color(0xFF624294),
+                    icon: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        const Icon(
+                          Icons.notifications_none,
+                          color: Color(0xFF624294),
+                        ),
+                        if (_unreadNotificationCount > 0)
+                          Positioned(
+                            right: -8,
+                            top: -8,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.red,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              constraints: const BoxConstraints(
+                                minWidth: 18,
+                                minHeight: 18,
+                              ),
+                              child: Text(
+                                _unreadNotificationCount > 99 ? '99+' : '$_unreadNotificationCount',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          )
+                      ],
                     ),
-                    onPressed: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const NotificationsScreen(),
-                      ),
-                    ),
+                    onPressed: () async {
+                      await Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const NotificationsScreen(),
+                        ),
+                      );
+                      if (!mounted) return;   //Updates the notification badge count after returning from the notifications screen
+                      await _refreshNotificationBadge();
+                    },
                   ),
                 ),
               ),
@@ -1636,6 +1667,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       ),
     );
   }
+  final ActivityNotificationService _notificationService = ActivityNotificationService();
+  int _unreadNotificationCount = 0;
 }
 
 class _BuildingMarkerTarget {

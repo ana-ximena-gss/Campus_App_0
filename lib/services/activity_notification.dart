@@ -12,6 +12,7 @@ class AppNotification {
     required this.message,
     required this.time,
     required this.type,
+    this.isRead = false,
   });
 
   final String id;
@@ -19,6 +20,21 @@ class AppNotification {
   final String message;
   final DateTime time;
   final AppNotificationType type;
+  final bool isRead;
+
+  // Creates a copy of the current notification only changing isRead
+  AppNotification copyWith({
+    bool? isRead,
+  }) {
+    return AppNotification(
+      id: id,
+      title: title,
+      message: message,
+      time: time,
+      type: type,
+      isRead: isRead ?? this.isRead,
+    );
+  }
 }
 
 class ActivityNotificationService {
@@ -43,12 +59,80 @@ class ActivityNotificationService {
       notifications,
     );
 
-    // Newest / soonest notifications first.
-    notifications.sort( (a, b) => b.time.compareTo(a.time), );
+    // Find what notifications have been read or cleared by the user.
+    final states = await _getNotificationStates(user.id);
 
-    return notifications;
+    final visibleNotifications = <AppNotification>[];
+
+    for (final notification in notifications) {
+      final state = states[notification.id];
+
+      // Was never read or cleared
+      if (state == null) {
+        visibleNotifications.add(notification);
+        continue;
+      }
+
+      final isCleared = state['is_cleared'] as bool? ?? false;
+
+      // If the notification was cleared, don't show it.
+      if (isCleared) { continue; }
+
+      final isRead = state['is_read'] as bool? ?? false;
+
+      visibleNotifications.add(
+        notification.copyWith(isRead: isRead),
+      );
+    }
+
+    // Newest / soonest notifications first.
+    visibleNotifications.sort( (a, b) => b.time.compareTo(a.time), );
+
+    return visibleNotifications;
   }
 
+  Future<void> markAsRead(
+  String notificationId,
+  ) async {
+    final user = _supabase.auth.currentUser;
+
+    if (user == null) { return; }
+
+    await _supabase
+        .from('notification_states')
+        .upsert(  // Insert or update the notification state for this user and notification.
+          {
+            'user_id': user.id,
+            'notification_id': notificationId,
+            'is_read': true,
+          },
+          onConflict: 'user_id,notification_id',
+        );
+  }
+
+  Future<void> clearNotification(
+    List<String> notificationIds,
+  ) async {
+    final user = _supabase.auth.currentUser;
+
+    if (user == null || notificationIds.isEmpty) { return; }
+
+    final rows = notificationIds.map( (id) {
+      return {
+        'user_id': user.id,
+        'notification_id': id,
+        'is_read': true,
+        'is_cleared': true,
+      };
+    }).toList();
+
+    await _supabase
+        .from('notification_states')
+        .upsert(
+          rows,
+          onConflict: 'user_id,notification_id',
+        );
+  }
   // ------------------------------------------------------------
   // ACTIVITIES THE USER JOINED
   // ------------------------------------------------------------
@@ -98,7 +182,7 @@ class ActivityNotificationService {
 
       notifications.add(
         AppNotification(
-          id: 'starting-${activity['id']}',
+          id: 'starting-${activity['id']}-${startsAt.toIso8601String()}',
           title: '${activity['title']} starts soon!',
           message: 'Starts in about $minutesLeft minutes.',
           time: startsAt,
@@ -107,6 +191,24 @@ class ActivityNotificationService {
       );
     }
   }
+
+  Future<Map<String, Map<String, dynamic>>> _getNotificationStates(
+  String userId,
+) async {
+  final rows = await _supabase
+      .from('notification_states')
+      .select(
+        'notification_id, is_read, is_cleared',
+      )
+      .eq('user_id', userId);
+
+  final states = <String, Map<String, dynamic>>{};
+
+  for (final row in rows) {
+    states[row['notification_id'] as String] = row;
+  }
+  return states;
+}
 
   // ------------------------------------------------------------
   // ACTIVITY REQUEST ACCEPTED / DECLINED
@@ -137,7 +239,7 @@ class ActivityNotificationService {
 
       notifications.add(
         AppNotification(
-          id: 'request-${activity['id']}',
+          id: 'request-${activity['id']}-${status.toLowerCase()}',
           title: 'Activity request updated',
           message:
               '"${activity['title']}" is now $status.',
@@ -147,4 +249,12 @@ class ActivityNotificationService {
       );
     }
   }
+  // for the Unread count (show how many notifications are unread on the bell icon)
+  Future<int> fetchUnreadCount() async {
+  final notifications = await fetchNotifications();
+
+  return notifications
+      .where((notification) => !notification.isRead)
+      .length;
+}
 }

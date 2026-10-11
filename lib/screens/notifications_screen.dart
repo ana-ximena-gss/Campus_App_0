@@ -14,8 +14,9 @@ class _NotificationsScreenState
   final ActivityNotificationService _notificationService =
       ActivityNotificationService();
 
-  late Future<List<AppNotification>> _notifications;
-
+  List<AppNotification> _notifications = [];
+  bool _isLoading = true;
+  String? _error;
   Timer? _refreshTimer;
 
   @override
@@ -24,7 +25,7 @@ class _NotificationsScreenState
 
     _loadNotifications();
 
-    // Check Supabase again every minute while this screen is open.
+    // check once every minute while this screen is open.
     _refreshTimer = Timer.periodic(
       const Duration(minutes: 1),
       (_) => _loadNotifications(),
@@ -37,88 +38,158 @@ class _NotificationsScreenState
     super.dispose();
   }
 
-  void _loadNotifications() {
-    if (!mounted) { return; }
+  Future<void> _loadNotifications() async {
+    try { final notifications = await _notificationService.fetchNotifications();
 
-    setState(() {
-      _notifications = _notificationService.fetchNotifications(); }); }
+      if (!mounted) { return; }
+
+      setState(() {
+        _notifications = notifications;
+        _isLoading = false;
+        _error = null;
+      });
+    } catch (error) {
+      if (!mounted) { return; }
+
+      setState(() {
+        _isLoading = false;
+        _error = error.toString();
+      });
+    }
+  }
+
+  Future<void> _markAsRead(
+    AppNotification notification,
+  ) async {
+    if (notification.isRead) { return; }
+
+    await _notificationService.markAsRead( notification.id, );
+
+    await _loadNotifications();
+  }
+
+  Future<void> _clearAll() async {
+    final ids = _notifications
+        .map((notification) => notification.id)
+        .toList();
+
+    await _notificationService.clearNotification( ids, );
+
+    await _loadNotifications();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Notifications'),
+
+        actions: [
+          if (_notifications.isNotEmpty)
+            TextButton(
+              onPressed: _clearAll,
+              child: const Text('Clear'),
+            ),
+        ],
       ),
-      body: FutureBuilder<List<AppNotification>>(
-        future: _notifications,
-        builder: (context, snapshot) {
-          // Loading
-          if (snapshot.connectionState ==
-              ConnectionState.waiting) {
-            return const Center(
-              child: CircularProgressIndicator(),
-            );
-          }
+      body: _buildBody(),
+    );
+  }
 
-          // Error checking
-          if (snapshot.hasError) {
-            return Center(
-              child: Text(
-                'Unable to load notifications.\n'
-                '${snapshot.error}',
-                textAlign: TextAlign.center,
+  Widget _buildBody() {
+    if (_isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
+    }
+
+    if (_error != null) {
+      return Center(
+        child: Text(
+          'Unable to load notifications.\n$_error',
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+
+    if (_notifications.isEmpty) {
+      return const Center(
+        child: Text(
+          'You’re all caught up.',
+          style: TextStyle(fontSize: 18),
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadNotifications,
+
+      child: ListView.separated(
+        padding: const EdgeInsets.all(16),
+
+        itemCount: _notifications.length,
+
+        separatorBuilder: (_, _) =>
+            const SizedBox(height: 8),
+
+        itemBuilder: (context, index) {
+          final notification =
+              _notifications[index];
+
+          return Card(
+            color: notification.isRead
+                ? null
+                : Theme.of(context)
+                    .colorScheme
+                    .primaryContainer,
+
+            child: ListTile(
+              onTap: () => _markAsRead(notification),
+                  
+              leading: Icon(
+                _iconForNotification(
+                  notification.type,
+                ),
               ),
-            );
-          }
 
-          final notifications = snapshot.data ?? [];
+              title: Text(
+                notification.title,
 
-          // Nothing to show
-          if (notifications.isEmpty) {
-            return const Center(
-              child: Text(
-                'You’re all caught up.',
-                style: TextStyle(fontSize: 18),
+                style: TextStyle(
+                  fontWeight:
+                      notification.isRead
+                          ? FontWeight.normal
+                          : FontWeight.bold,
+                ),
               ),
-            );
-          }
 
-          // Show notifications
-          return RefreshIndicator(
-            onRefresh: () async {
-              _loadNotifications();
-              await _notifications;
-            },
-            child: ListView.separated(
-              padding: const EdgeInsets.all(16),
-              itemCount: notifications.length,
-              separatorBuilder: (_, _) =>
-                  const SizedBox(height: 8),
-              itemBuilder: (context, index) {
-                final notification =
-                    notifications[index];
+              subtitle: Text(
+                notification.message,
+              ),
 
-                return Card(
-                  child: ListTile(
-                    leading: Icon(
-                      notification.type ==
-                              AppNotificationType.startingSoon
-                          ? Icons.schedule
-                          : Icons.assignment_turned_in,
+              // Small dot = unread.
+              trailing: notification.isRead
+                  ? null
+                  : const Icon(
+                      Icons.circle,
+                      size: 10,
                     ),
-                    title: Text(
-                      notification.title,
-                    ),
-                    subtitle: Text(
-                      notification.message,
-                    ),
-                  ),
-                );
-              },
             ),
           );
         },
       ),
     );
+  }
+
+  IconData _iconForNotification(
+    AppNotificationType type,
+  ) {
+    switch (type) {
+      case AppNotificationType.startingSoon:
+        return Icons.schedule;
+
+      case AppNotificationType.requestUpdate:
+        return Icons.assignment_turned_in;
+    }
   }
 }
