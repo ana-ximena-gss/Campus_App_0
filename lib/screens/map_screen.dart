@@ -199,7 +199,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       'bonfire-utrgv-edinburg-campus-buildings';
   static const String _campusBuildingsFillLayerId =
       'bonfire-utrgv-edinburg-campus-buildings-fill-layer';
-  static const double _buildingMarkerIconSize = 0.8;
+  static const double _buildingMarkerIconSize = 0.1333333333;
 
   static final Point utrgvEdinburgCampus = Point(
     coordinates: Position(-98.174165, 26.304551),
@@ -582,11 +582,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
             ],
             ['to-color', '#312E81'],
           ],
-          fillOpacityExpression: const [
-            'coalesce',
-            ['get', 'fill-opacity'],
-            1.0,
-          ],
+          fillOpacityExpression: const ['number', 0.4],
         ),
       );
     }
@@ -619,7 +615,6 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     final rawFeatures = decoded['features'];
     if (rawFeatures is! List) return;
 
-    final markerImage = await _createBuildingDiscoveryMarkerImage();
     final options = <PointAnnotationOptions>[];
     final targets = <_BuildingMarkerTarget>[];
 
@@ -631,11 +626,14 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
 
       final anchor = _sparkleAnchorForRing(ring);
       final location = _buildingLocationFromFeature(feature, anchor);
+      final markerImage = await _loadPermanentMarkerImage(
+        _activitiesInBuilding(ring).length,
+      );
       options.add(
         PointAnnotationOptions(
           geometry: Point(coordinates: anchor),
           image: markerImage,
-          iconAnchor: IconAnchor.CENTER,
+          iconAnchor: IconAnchor.BOTTOM,
           iconSize: _buildingMarkerIconSize,
           iconOffset: const [0, -4],
           symbolSortKey: 1000,
@@ -652,60 +650,6 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
         _buildingMarkerTargets[annotationId] = targets[index];
       }
     }
-  }
-
-  Future<Uint8List> _createBuildingDiscoveryMarkerImage() async {
-    const imageWidth = 72.0;
-    const imageHeight = 96.0;
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder);
-    final beaconPath = Path()
-      ..moveTo(36, 4)
-      ..cubicTo(48, 4, 55, 12, 55, 22)
-      ..cubicTo(55, 31, 49, 37, 41, 39)
-      ..lineTo(44, 47)
-      ..cubicTo(47, 50, 53, 53, 57, 57)
-      ..cubicTo(64, 64, 67, 72, 66, 79)
-      ..lineTo(64, 82)
-      ..cubicTo(69, 83, 71, 86, 71, 89)
-      ..cubicTo(71, 93, 68, 94, 64, 94)
-      ..lineTo(8, 94)
-      ..cubicTo(4, 94, 1, 93, 1, 89)
-      ..cubicTo(1, 86, 3, 83, 8, 82)
-      ..lineTo(6, 79)
-      ..cubicTo(5, 72, 8, 64, 15, 57)
-      ..cubicTo(19, 53, 25, 50, 28, 47)
-      ..lineTo(31, 39)
-      ..cubicTo(23, 37, 17, 31, 17, 22)
-      ..cubicTo(17, 12, 24, 4, 36, 4)
-      ..close();
-
-    canvas.drawShadow(beaconPath, const Color(0x990B1220), 4, true);
-    canvas.drawPath(
-      beaconPath,
-      Paint()
-        ..color = Colors.white
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 4
-        ..strokeJoin = StrokeJoin.round,
-    );
-    canvas.drawPath(
-      beaconPath,
-      Paint()
-        ..color = const Color(0xFF17243A)
-        ..style = PaintingStyle.fill,
-    );
-
-    final image = await recorder.endRecording().toImage(
-      imageWidth.toInt(),
-      imageHeight.toInt(),
-    );
-    final data = await image.toByteData(format: ui.ImageByteFormat.png);
-    image.dispose();
-    if (data == null) {
-      throw StateError('Unable to render campus building discovery marker.');
-    }
-    return data.buffer.asUint8List();
   }
 
   Position _sparkleAnchorForRing(List<List<double>> ring) {
@@ -992,6 +936,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
         ..clear()
         ..addAll(groupedActivities);
 
+      await _refreshCampusBuildingMarkers();
       await _refreshPermanentLocationMarkers(); //activity counts changed, so redraw
 
       await activityManager.deleteAll();
@@ -1148,7 +1093,11 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       return;
     }
 
-    final activitiesInBuilding = _latestActivities
+    _showLocationDetails(location, _activitiesInBuilding(ring));
+  }
+
+  List<Activity> _activitiesInBuilding(List<List<double>> ring) {
+    return _latestActivities
         .where(
           (activity) => _pointInPolygon(
             lon: activity.longitude,
@@ -1157,7 +1106,6 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
           ),
         )
         .toList();
-    _showLocationDetails(location, activitiesInBuilding);
   }
 
   List<List<double>>? _firstRingFromGeoJsonFeature(

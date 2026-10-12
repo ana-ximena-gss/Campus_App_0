@@ -61,3 +61,4 @@ linux/flutter/ephemeral/
 
 # Local VS Code settings
 .vscode/
+supabase/.temp/
